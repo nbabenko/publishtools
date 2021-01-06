@@ -7,13 +7,10 @@ import json
 //use path="" if you want to go from os.home_dir()/code/
 //will find all wiki's
 pub fn new(path string) ?Publisher {
+	path2 := path.replace('~', os.home_dir())
 	mut publisher := Publisher{}
-	mut domain := os.getenv('DOMAIN')
-	if domain == '' {
-		domain = 'http://localhost:8082'
-	}
-	publisher.gitlevel = 0
-	publisher.load_all(path)?
+	publisher.gitlevel = 0 //not sure why this is 0
+	publisher.load_all(path2)?
 	return publisher
 }
 
@@ -77,8 +74,8 @@ pub fn site_page_names_get(name string) ?(string, string) {
 
 // check all pages, try to find errors
 pub fn (mut publisher Publisher) check() {
-	for site in publisher.sites {
-		site.check(mut publisher)
+	for mut site in publisher.sites {
+		site.check(mut &publisher)
 	}
 }
 

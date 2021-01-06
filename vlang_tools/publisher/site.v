@@ -76,7 +76,31 @@ fn (mut site Site) page_remember(path string, name string, mut publisher &Publis
 	}
 }
 
-pub fn (site Site) check( mut publisher &Publisher) {
+pub fn (mut site Site) reload( mut publisher &Publisher) {
+	site.state = SiteState.init
+	site.pages = map[string]int{}
+	site.files = map[string]int{}
+	site.errors = []SiteError{}
+	site.files_process(mut publisher)
+	site.check(mut publisher)
+}
+
+
+//see if the pages are already loaded if not do
+pub fn (mut site Site) check( mut publisher &Publisher) {
+	if site.state == SiteState.ok{return}
+	site.load(mut publisher)
+}
+
+
+
+pub fn (mut site Site) load( mut publisher &Publisher) {
+
+	if site.state == SiteState.ok{return}
+
+	if site.pages.len == 0 {
+		site.files_process(mut publisher)
+	}
 
 	imgnotusedpath := site.path+"/img_notused"
 	if ! os.exists(imgnotusedpath){
@@ -105,6 +129,8 @@ pub fn (site Site) check( mut publisher &Publisher) {
 	}
 
 }
+
+
 
 // process files in the site
 pub fn (mut site Site) files_process(mut publisher &Publisher) ? {

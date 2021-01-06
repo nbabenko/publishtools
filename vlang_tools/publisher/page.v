@@ -10,7 +10,7 @@ pub fn (page Page) path_get(mut publisher &Publisher) string {
 // will load the content, check everything, return true if ok
 pub fn (mut page Page) check(mut publisher &Publisher) bool {
 	page.site_get(mut publisher)
-	page.process(publisher)
+	page.process(mut publisher)
 
 	if page.state == PageStatus.error {
 		return false
@@ -137,11 +137,11 @@ fn ( mut page Page) process_links(mut publisher &Publisher) ?string {
 					serverlink = '[${link_description}](file__${sitename}__${itemname})'
 					if _ := publisher.file_exists("$sitename:$itemname") {
 						//remember that the file has been used
-						mut img := publisher.file_get("$sitename:$itemname") or {
+						mut file := publisher.file_get("$sitename:$itemname") or {
 							return err
 						}
-						if !(page.site_id in img.usedby){
-							img.usedby<<page.id
+						if !(page.site_id in file.usedby){
+							file.usedby<<page.id
 						}
 
 					}else{

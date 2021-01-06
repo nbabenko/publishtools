@@ -3,6 +3,7 @@ module main
 import os
 import vweb
 import publisher
+import config
 
 const (
 	port = 8082
@@ -17,6 +18,7 @@ pub mut:
 
 // Run server
 fn main() {
+	config.config()
 	vweb.run<App>(port)
 }
 
@@ -133,8 +135,8 @@ pub fn (mut app App) errors(sitename string) vweb.Result {
 	
 	mut page_errors := map[string][]publisher.PageError{}
 	
-	for name, id in site.pages{
-		page := site.page_get("$name", mut &app.publisher) or { return app.not_found() }
+	for name, _ in site.pages{
+		page := site.page_get(name, mut &app.publisher) or { return app.not_found() }
 		if page.errors.len > 0{
 			page_errors[name] = page.errors
 		}
