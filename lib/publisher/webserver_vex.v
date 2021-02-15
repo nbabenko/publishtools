@@ -33,12 +33,6 @@ fn print_req_info(mut req ctx.Req, mut res ctx.Resp) {
 	println('$utils.red_log() $req.method $req.path')
 }
 
-fn helloworld(req &ctx.Req, mut res ctx.Resp) {
-	mut myconfig := (&MyContext(req.ctx)).config
-	res.send('Hello World! $myconfig.paths.base', 200)
-}
-
-
 fn path_wiki_get(mut config myconfig.ConfigRoot, site string, name string) ?(FileType, string) {
 	// println(" - wiki get: '$site' '$name'")
 	site_config := config.site_wiki_get(site)?
@@ -118,7 +112,11 @@ fn path_wiki_get(mut config myconfig.ConfigRoot, site string, name string) ?(Fil
 	return filetype, path2
 }
 
-fn index_template(wikis []string, sites []string) string{
+fn index_template(wikis map[string][]string, sites map[string][]string, port int) string{
+	mut port_str := ""
+	if port != 80{
+		port_str = ":$port"
+	}
 	return $tmpl('index_root.html')
 }
 fn error_template(sitename string, path string) string{
@@ -136,20 +134,28 @@ fn error_template(sitename string, path string) string{
 // Index (List of wikis) -- reads index.html
 fn index_root(req &ctx.Req, mut res ctx.Resp) {
 	config := (&MyContext(req.ctx)).config
-	mut wikis := []string{}
-	mut sites := []string{}
+	mut wikis := map[string][]string{}
+	mut sites := map[string][]string{}
+
+	mut all := map[string][]string{}
+	for site in config.sites{
+		all[site.alias] = site.domains
+	}
 
 	path := os.join_path(config.paths.publish)
 	list := os.ls(path) or { panic(err) }
 	for item in list {
+		mut alias := ""
 		if item.starts_with("wiki_"){
-			wikis << item
+			alias = item.replace("wiki_", "")
+			wikis[alias] = all[alias]
 		}else if item.starts_with("www_"){
-			sites << item.replace("www_", "")
+			alias = item.replace("www_", "")
+			sites[alias] = all[alias]
 		}
 	}
 	res.headers['Content-Type'] = ['text/html']
-	res.send(index_template(wikis, sites), 200)
+	res.send(index_template(wikis, sites, config.port), 200)
 }
 
 fn return_wiki_errors(sitename string, req &ctx.Req, mut res ctx.Resp) {
@@ -166,6 +172,7 @@ fn return_wiki_errors(sitename string, req &ctx.Req, mut res ctx.Resp) {
 
 fn site_wiki_deliver(mut config myconfig.ConfigRoot, site string, path string, req &ctx.Req, mut res ctx.Resp) {
 	name := os.base(path)
+
 	if path.ends_with("errors") || path.ends_with("error") {
 		return_wiki_errors(site,req,mut res)
 		return
@@ -195,8 +202,8 @@ fn site_wiki_deliver(mut config myconfig.ConfigRoot, site string, path string, r
 	}
 }
 
-fn site_www_deliver(mut config myconfig.ConfigRoot, site string, path string, req &ctx.Req, mut res ctx.Resp) {
-	mut site_path := config.path_publish_web_get(site)or {res.send("Cannot find site: $site\n$err", 404) return}
+fn site_www_deliver(mut config myconfig.ConfigRoot, domain string, path string, req &ctx.Req, mut res ctx.Resp) {
+	mut site_path := config.path_publish_web_get_domain(domain)or {res.send("Cannot find domain: $domain\n$err", 404) return}
 	mut path2 := path
 	
 	if path2.trim("/")==""{
@@ -246,20 +253,36 @@ fn site_www_deliver(mut config myconfig.ConfigRoot, site string, path string, re
 
 fn site_deliver(req &ctx.Req, mut res ctx.Resp) {
 	mut config := (&MyContext(req.ctx)).config
-	mut path := req.params["path"]
-	splitted := path.trim("/").split("/")
-	mut site := splitted[0].to_lower()
-	path = splitted[1..].join("/").trim("/").trim(" ")
+	mut host := req.headers['Host'][0]
+	mut splitted := host.split(":")
+	mut domain := "localhost"
+	mut site := ""
 
-	if site.starts_with("www_"){
-		site = site[4..]
-		site_www_deliver(mut config,site,path,req,mut res)		
-	}else if site.starts_with("wiki_"){
-		site = site[5..]
+	if splitted.len > 0{
+		domain = splitted[0]
+	}
+	
+	mut iswiki := true
+	for siteconfig in config.sites{
+		if domain in siteconfig.domains{
+			if siteconfig.cat == myconfig.SiteCat.web{
+				iswiki = false
+			}else{
+				site = siteconfig.name
+			}
+		}
+	}
+
+	mut path := req.params["path"]
+	splitted = path.trim("/").split("/")
+	
+	path = splitted[0..].join("/").trim("/").trim(" ")
+	
+	if iswiki{
 		site_wiki_deliver(mut config,site,path,req,mut res)		
-	}else{
+	}else{	
 		//if no wiki or www used then its a website
-		site_www_deliver(mut config,site,path,req,mut res)
+		site_www_deliver(mut config,domain,path,req,mut res)
 	}
 }
 
@@ -276,11 +299,10 @@ pub fn webserver_run() {
 
 	app.use(print_req_info)
 
-	app.route(.get, '/', index_root)
-	app.route(.get, '/hello', helloworld)
+	app.route(.get, '/published/list', index_root)
     app.route(.get, '/*path',site_deliver)
 
-
-	server.serve(app, 9998)
+	println("List all websites & Wikis in publishing tools @ http://localhost:$config.port/published/list")
+	server.serve(app, config.port)
 }
 
